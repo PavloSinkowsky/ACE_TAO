@@ -64,10 +64,10 @@ ACE_SSL_SOCK_Acceptor::ssl_accept (ACE_SSL_SOCK_Stream &new_stream,
   int status;
   do
     {
-      // These handle sets are used to set up for whatever SSL_accept
-      // says it wants next. They're reset on each pass around the loop.
-      ACE_Handle_Set rd_handle;
-      ACE_Handle_Set wr_handle;
+      // These flags are used to set up for whatever SSL_accept says 
+      // it wants next. They're reset on each pass around the loop.
+      bool read_ready = false;
+      bool write_ready = false;
 
       status = ::SSL_accept (ssl);
       switch (::SSL_get_error (ssl, status))
@@ -77,12 +77,12 @@ ACE_SSL_SOCK_Acceptor::ssl_accept (ACE_SSL_SOCK_Stream &new_stream,
           break;                    // Done
 
         case SSL_ERROR_WANT_WRITE:
-          wr_handle.set_bit (handle);
+          write_ready = true;
           status = 1;               // Wait for more activity
           break;
 
         case SSL_ERROR_WANT_READ:
-          rd_handle.set_bit (handle);
+          read_ready = true;
           status = 1;               // Wait for more activity
           break;
 
@@ -110,9 +110,9 @@ ACE_SSL_SOCK_Acceptor::ssl_accept (ACE_SSL_SOCK_Stream &new_stream,
               // Use that to decide what to do.
               status = 1;               // Wait for more activity
               if (SSL_want_write (ssl))
-                wr_handle.set_bit (handle);
+                write_ready = true;
               else if (SSL_want_read (ssl))
-                rd_handle.set_bit (handle);
+                read_ready = true;
               else
                 status = -1;            // Doesn't want anything - bail out
             }
@@ -128,24 +128,22 @@ ACE_SSL_SOCK_Acceptor::ssl_accept (ACE_SSL_SOCK_Stream &new_stream,
 
       if (status == 1)
         {
-          // Must have at least one handle to wait for at this point.
-          ACE_ASSERT (rd_handle.num_set() == 1 || wr_handle.num_set () == 1);
-          status = ACE::select (int (handle) + 1,
-                                &rd_handle,
-                                &wr_handle,
-                                0,
-                                timeout);
+
+          // Must have at least one flag set at this point.
+          ACE_ASSERT (write_ready || read_ready);
+          status = ACE::handle_ready(handle, 
+                                     timeout, 
+                                     read_ready, 
+                                     write_ready, 
+                                     false);
 
           (void) countdown.update ();
 
-          // 0 is timeout, so we're done.
-          // -1 is error, so we're done.
-          // Could be both handles set (same handle in both masks) so
+          // -1 is either error or timeout, so we're done.
+          // Could be both states (same handle in both masks) so
           // set to 1.
-          if (status >= 1)
+          if (status > 1)
             status = 1;
-          else                   // Timeout or failure
-            status = -1;
         }
 
     } while (status == 1 && !SSL_is_init_finished (ssl));

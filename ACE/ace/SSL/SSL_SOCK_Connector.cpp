@@ -73,10 +73,10 @@ ACE_SSL_SOCK_Connector::ssl_connect (ACE_SSL_SOCK_Stream &new_stream,
 
   do
     {
-      // These handle sets are used to set up for whatever SSL_connect
-      // says it wants next. They're reset on each pass around the loop.
-      ACE_Handle_Set rd_handle;
-      ACE_Handle_Set wr_handle;
+      // These flags are used to set up for whatever SSL_connect says 
+      // it wants next. They're reset on each pass around the loop.
+      bool read_ready = false;
+      bool write_ready = false;
 
       status = ::SSL_connect (ssl);
       switch (::SSL_get_error (ssl, status))
@@ -88,12 +88,12 @@ ACE_SSL_SOCK_Connector::ssl_connect (ACE_SSL_SOCK_Stream &new_stream,
           break;                    // Done
 
         case SSL_ERROR_WANT_WRITE:
-          wr_handle.set_bit (handle);
+          write_ready = true;
           status = 1;               // Wait for more activity
           break;
 
         case SSL_ERROR_WANT_READ:
-          rd_handle.set_bit (handle);
+          read_ready = true;
           status = 1;               // Wait for more activity
           break;
 
@@ -122,11 +122,11 @@ ACE_SSL_SOCK_Connector::ssl_connect (ACE_SSL_SOCK_Stream &new_stream,
               status = 1;               // Wait for more activity
               if (SSL_want_write (ssl))
                 {
-                  wr_handle.set_bit (handle);
+                  write_ready = true;
                 }
               else if (SSL_want_read (ssl))
                 {
-                  rd_handle.set_bit (handle);
+                  read_ready = true;
                 }
               else
                 {
@@ -148,28 +148,23 @@ ACE_SSL_SOCK_Connector::ssl_connect (ACE_SSL_SOCK_Stream &new_stream,
 
       if (status == 1)
         {
-          // Must have at least one handle to wait for at this point.
-          ACE_ASSERT (rd_handle.num_set () == 1 || wr_handle.num_set () == 1);
+          // Must have at least one state to wait for at this point.
+          ACE_ASSERT (read_ready || write_ready);
 
           // Block indefinitely if timeout pointer is zero.
-          status = ACE::select (int (handle) + 1,
-                                &rd_handle,
-                                &wr_handle,
-                                0,
-                                (timeout == 0 ? 0 : &t));
+          status = ACE::handle_ready(handle, 
+                                     (timeout == 0 ? 0 : &t),
+                                     read_ready,
+                                     write_ready,
+                                     false);
 
           (void) countdown.update ();
 
-          // 0 is timeout, so we're done.
-          // -1 is error, so we're done.
-          // Could be both handles set (same handle in both masks) so set to 1.
-          if (status >= 1)
+          // -1 is either error or timeout, so we're done.
+          // Could be both states (same handle in both masks) so set to 1.
+          if (status > 1)
             {
               status = 1;
-            }
-          else                 // Timeout or socket failure
-            {
-              status = -1;
             }
         }
 
