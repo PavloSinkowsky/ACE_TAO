@@ -296,9 +296,6 @@ private:
   /// we couldn't directly use ACE_TSS because it would
   /// create circular dependency
 #if defined (ACE_HAS_THREADS)
-  /// Avoid race conditions during initialization.
-  ACE_Thread_Mutex keylock_;
-  /// "First time in" flag.
   /// Key for the thread-specific error data.
   ACE_thread_key_t key_;
 #else // defined (ACE_HAS_THREADS)

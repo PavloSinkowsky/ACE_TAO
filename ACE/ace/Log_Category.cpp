@@ -39,12 +39,23 @@ ACE_Log_Category::ACE_Log_Category(const char* name)
   , per_thr_obj_(this, 0)
 #endif
 {
+#if defined (ACE_HAS_THREADS)
+
+    static ACE_Atomic_Op<ACE_Thread_Mutex, unsigned int> log_category_id_assigner(1);
+    id_ = log_category_id_assigner++; // for atomic integers, post increment is more efficient
+
+    if (ACE_OS::thr_keycreate (&this->key_,
+                               &ACE_Log_Category_tss_destroy) != 0)
+    {
+        return; // Major problems, this should *never* happen!
+    }
+
+#endif
 }
 
 ACE_Log_Category::~ACE_Log_Category()
 {
 #if defined (ACE_HAS_THREADS)
-  ACE_GUARD (ACE_Thread_Mutex, ace_mon, this->keylock_);
 
   if (this->id_ > 0)
     {
@@ -75,21 +86,11 @@ ACE_Log_Category_TSS*
 ACE_Log_Category::per_thr_obj()
 {
 #if defined (ACE_HAS_THREADS)
-  {
-    // Ensure that we are serialized!
-    ACE_GUARD_RETURN (ACE_Thread_Mutex, ace_mon, this->keylock_, 0);
-
-    // make sure we only create the key once!
-    if (this->id_ == 0)
-      {
-        static ACE_Atomic_Op<ACE_Thread_Mutex, unsigned int> log_category_id_assigner(1);
-        id_ = log_category_id_assigner++; // for atomic integers, post increment is more efficient
-
-        if (ACE_OS::thr_keycreate (&this->key_,
-                                   &ACE_Log_Category_tss_destroy) != 0)
-          return 0; // Major problems, this should *never* happen!
-      }
-  }
+  // make sure we only create the key once!
+  if (this->key_ == ACE_OS::NULL_key)
+    {
+        return 0; // Major problems, this should *never* happen!
+    }
 
   void *temp = 0;
   if (ACE_OS::thr_getspecific (this->key_, &temp) == -1)
