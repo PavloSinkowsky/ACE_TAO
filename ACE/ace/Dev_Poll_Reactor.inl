@@ -36,6 +36,13 @@ ACE_Dev_Poll_Reactor::Handler_Repository::max_size () const
 // -----------------------------------------------------------------
 
 ACE_INLINE
+ACE_Dev_Poll_Handler_Guard::ACE_Dev_Poll_Handler_Guard (void)
+  : eh_ (0),
+    refcounted_ (false)
+{
+}
+
+ACE_INLINE
 ACE_Dev_Poll_Handler_Guard::ACE_Dev_Poll_Handler_Guard
   (ACE_Event_Handler *eh,
    bool do_incr)
@@ -58,6 +65,31 @@ ACE_Dev_Poll_Handler_Guard::~ACE_Dev_Poll_Handler_Guard (void)
 {
   if (this->refcounted_ && this->eh_ != 0)
     this->eh_->remove_reference ();
+}
+
+ACE_INLINE void 
+ACE_Dev_Poll_Handler_Guard::reset (ACE_Event_Handler *eh, bool do_incr )
+{
+  if (this->eh_)
+  {
+    if (this->refcounted_)
+      this->eh_->remove_reference ();
+
+    this->eh_ = 0;
+    this->refcounted_ = false;
+  }
+
+  if (eh)
+  {
+    this->refcounted_ =
+      eh->reference_counting_policy ().value () ==
+      ACE_Event_Handler::Reference_Counting_Policy::ENABLED;
+
+    if (do_incr && this->refcounted_)
+      eh->add_reference();
+
+    this->eh_ = eh;
+  }
 }
 
 ACE_INLINE void
