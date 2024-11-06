@@ -1177,6 +1177,14 @@ ACE_Dev_Poll_Reactor::dispatch_io_event (Token_Guard &guard)
       ACE_Reactor_Mask disp_mask = 0;
       ACE_Event_Handler *eh = 0;
       int (ACE_Event_Handler::*callback)(ACE_HANDLE) = 0;
+
+      // Modify the reference count in an exception-safe way.
+      // Note that eh could be the notify handler. It's not strictly
+      // necessary to manage its refcount, but since we don't enable
+      // the counting policy, it won't do much. Management of the
+      // notified handlers themselves is done in the notify handler.
+      ACE_Dev_Poll_Handler_Guard eh_guard;
+
 #ifndef ACE_HAS_DEV_POLL
       bool reactor_resumes_eh = false;
 #endif /* !ACE_HAS_DEV_POLL */
@@ -1258,6 +1266,8 @@ ACE_Dev_Poll_Reactor::dispatch_io_event (Token_Guard &guard)
             reactor_resumes_eh =
               eh->resume_handler () ==
               ACE_Event_Handler::ACE_REACTOR_RESUMES_HANDLER;
+
+            eh_guard.reset (eh);
           }
 #endif /* ACE_HAS_DEV_POLL */
 
@@ -1281,13 +1291,6 @@ ACE_Dev_Poll_Reactor::dispatch_io_event (Token_Guard &guard)
         }
 
       {
-        // Modify the reference count in an exception-safe way.
-        // Note that eh could be the notify handler. It's not strictly
-        // necessary to manage its refcount, but since we don't enable
-        // the counting policy, it won't do much. Management of the
-        // notified handlers themselves is done in the notify handler.
-        ACE_Dev_Poll_Handler_Guard eh_guard (eh);
-
         // Release the reactor token before upcall.
         guard.release_token ();
 

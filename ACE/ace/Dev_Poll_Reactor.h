@@ -1155,6 +1155,9 @@ protected:
 class ACE_Dev_Poll_Handler_Guard
 {
 public:
+  /// No-op constructor
+  ACE_Dev_Poll_Handler_Guard (void);   
+
   /// Constructor
   /**
    * The constructor checks to see if @a eh is a reference-counted handler and
@@ -1172,6 +1175,9 @@ public:
    * handler corresponding to the given handle.
    */
   ~ACE_Dev_Poll_Handler_Guard (void);
+
+  /// Replace stored handler with @a eh.
+  void reset (ACE_Event_Handler* eh, bool do_incr = true);
 
   /// Release the event handler from this guard; when the destructor is
   /// called, the handler's reference count will not be decremented.
