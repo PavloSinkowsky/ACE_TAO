@@ -340,8 +340,11 @@ ACE_SSL_SOCK_Connector::complete (ACE_SSL_SOCK_Stream &new_stream,
       && this->connector_.complete (new_stream.peer (),
                                     remote_sap,
                                     tv) == -1)
-    return -1;
-
+    {
+      new_stream.peer ().close ();
+      new_stream.set_handle (ACE_INVALID_HANDLE);
+      return -1;
+    }
   // The handle in the SSL_SOCK_Stream should have already been set in
   // the connect() method.
 
